@@ -1,0 +1,25 @@
+--- a/usr/trimui/bin/runtrimui-original.sh
++++ b/usr/trimui/bin/runtrimui-original.sh
+@@ -76,6 +76,9 @@
+ #wait for SDCARD mounted
+ mounted=`cat /proc/mounts | grep SDCARD`
+ cnt=0
++# >>> Startup Speeder Upper: the slot was empty a moment ago and still has no card
++[ -e /tmp/startup-speeder-nocard ] && [ ! -e /dev/mmcblk1 ] && cnt=6
++# <<< Startup Speeder Upper
+ while [ "$mounted" == "" ] && [ $cnt -lt 6 ] ; do
+    sleep 0.5
+    cnt=`expr $cnt + 1`
+@@ -115,7 +118,11 @@
+ elif [ "$usbmode" == "host" ] ; then
+     /usr/trimui/bin/usb_host.sh
+ else
+-    /usr/trimui/bin/usb_device.sh
++    # >>> Startup Speeder Upper: at startup this waits about 1 s; the menu starts meanwhile.
++    # usb_host.sh and usb_dock.sh wait while it runs, so it can't undo a later mode change.
++    /usr/trimui/bin/usb_device.sh &
++    echo $! > /tmp/startup-speeder-usb.pid
++    # <<< Startup Speeder Upper
+ fi
+ 
+ wifion=`/usr/trimui/bin/systemval wifi`

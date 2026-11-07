@@ -1,0 +1,10 @@
+--- a/usr/trimui/bin/usb_host.sh
++++ b/usr/trimui/bin/usb_host.sh
+@@ -1,3 +1,7 @@
++# >>> Startup Speeder Upper: let the startup switch to device mode finish first (at most 10 s)
++pid=$(cat /tmp/startup-speeder-usb.pid 2> /dev/null)
++i=0; while [ -n "$pid" ] && [ -d /proc/$pid ] && grep -q usb_device /proc/$pid/cmdline 2> /dev/null && [ $i -lt 200 ]; do usleep 50000; i=$((i + 1)); done
++# <<< Startup Speeder Upper
+ cat /sys/devices/platform/soc/usbc0/usb_host
+ # sleep 0.1
+ echo 1 > /sys/devices/platform/soc/usbc0/axp_5v

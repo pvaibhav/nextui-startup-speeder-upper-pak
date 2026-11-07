@@ -1,0 +1,20 @@
+--- a/etc/init.d/runtrimui
++++ b/etc/init.d/runtrimui
+@@ -13,6 +13,17 @@
+ 	while [ -b /dev/mmcblk1 ] && ! grep -q ' /mnt/SDCARD ' /proc/mounts && [ $i -lt 50 ]; do
+ 		usleep 20000; i=$((i + 1))
+ 	done
++	# With the SD slot physically empty (its card-detect pin "cd" reads high), the
++	# launchers have no card to wait for. Any doubt keeps their wait.
++	rm -f /tmp/startup-speeder-nocard
++	if [ ! -e /dev/mmcblk1 ]; then
++		dbg=/sys/kernel/debug
++		[ -e $dbg/gpio ] || { dbg=/tmp/.startup-speeder-dbg; mkdir -p $dbg; mount -t debugfs debugfs $dbg; }
++		if [ "$(grep -c '|cd ' $dbg/gpio 2> /dev/null)" = 1 ] && grep -q '|cd *) in *hi' $dbg/gpio && [ ! -e /dev/mmcblk1 ]; then
++			touch /tmp/startup-speeder-nocard
++		fi
++		[ $dbg = /sys/kernel/debug ] || { umount $dbg; rmdir $dbg; }
++	fi
+ 	# <<< Startup Speeder Upper
+ 	$PROG
+ }

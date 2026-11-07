@@ -1,0 +1,12 @@
+--- a/usr/trimui/bin/runtrimui.sh
++++ b/usr/trimui/bin/runtrimui.sh
+@@ -6,6 +6,9 @@
+ echo before mount `cat /proc/uptime` >> /tmp/nextui_boottime
+ mounted=`cat /proc/mounts | grep -i SDCARD`
+ cnt=0
++# >>> Startup Speeder Upper: the slot was empty a moment ago and still has no card
++[ -e /tmp/startup-speeder-nocard ] && [ ! -e /dev/mmcblk1 ] && cnt=6
++# <<< Startup Speeder Upper
+ while [ "$mounted" == "" ] && [ $cnt -lt 6 ] ; do
+    sleep 0.5
+    cnt=`expr $cnt + 1`
