@@ -7,7 +7,7 @@ instead of 15. One button to speed up, one button to undo.
 |---|---|
 | 14.9 s | 5.8 s |
 
-![Your Brick took 14.9 seconds to start. Let's dunk that down to about 6.](docs/screenshots/offer.png)
+<img src="docs/screenshots/offer.png" alt="Your Brick took 14.9 seconds to start. Let's dunk that down to about 6." width="400">
 
 ## Install
 
@@ -22,7 +22,7 @@ to the SD card's root and restart.
 2. The Brick restarts. Faster.
 3. Press **A** at "Keep the changes?".
 
-![Started in 5.9 sec. Keep the changes?](docs/screenshots/keep.png)
+<img src="docs/screenshots/keep.png" alt="Started in 5.9 sec. Keep the changes?" width="400">
 
 **B**, or no answer for 15 seconds, puts everything back and restarts.
 
@@ -33,7 +33,7 @@ bit.
 Open the tool again to see the seconds you're saving, or to go back to the
 slow lane.
 
-![That's 9.0 seconds less waiting. Remove the tweaks?](docs/screenshots/fast-lane.png)
+<img src="docs/screenshots/fast-lane.png" alt="That's 9.0 seconds less waiting. Remove the tweaks?" width="400">
 
 ## Needs
 
@@ -58,6 +58,9 @@ safety nets: [docs/how-it-works.md](docs/how-it-works.md).
 
 The tweaks come from boot research for [BaseOS](https://github.com/pvaibhav/BaseOS),
 which starts Anbernic handhelds in about 4 seconds.
+
+The dialogs are [minui-presenter](https://github.com/josegonzalez/minui-presenter)
+by Jose Diaz-Gonzalez.
 
 ## Building
 
