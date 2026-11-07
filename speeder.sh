@@ -451,9 +451,7 @@ cmd_boot() {
 	ms=$(cmd_time)
 	# NextUI's install splash may still be drawing; the question has to be seen.
 	killall -9 show2.elf 2>/dev/null
-	msg="Startup has been made faster!"
-	[ -n "$ms" ] && msg="$msg\nThat took $(secs "$ms") seconds."
-	if ask "$msg\n\nKeep the changes?" 15; then
+	if ask "$(keep_question "$ms")" 15; then
 		cmd_keep "$ms"
 		return 0
 	fi

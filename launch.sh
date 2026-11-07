@@ -67,7 +67,7 @@ fast)
 	;;
 trial)
 	# The question normally comes at startup; seeing this screen means it works.
-	if ask "Startup has been made faster!\n\nKeep the changes?"; then
+	if ask "$(keep_question "$now")"; then
 		"$SPEEDER" keep "$now"
 		exit 0
 	fi

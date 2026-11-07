@@ -61,3 +61,12 @@ unbusy() {
 
 # milliseconds -> seconds with one decimal
 secs() { awk -v ms="$1" 'BEGIN { printf "%.1f", ms / 1000 }'; }
+
+# keep_question NOW_MS: asked after the first faster startup
+keep_question() {
+	if [ -n "$1" ]; then
+		echo "Started in $(secs "$1") sec.\nKeep the changes?"
+	else
+		echo "Keep the changes?"
+	fi
+}
