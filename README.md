@@ -11,7 +11,7 @@ instead of 15. One button to speed up, one button to undo.
 
 ## Install
 
-Find it in Pak Store under Miscellaneous Tools. Or copy
+Find it in Pak Store under System. Or copy
 `Startup.Speeder.Upper.pakz` from the
 [latest release](https://github.com/pvaibhav/nextui-startup-speeder-upper-pak/releases/latest)
 to the SD card's root and restart.
