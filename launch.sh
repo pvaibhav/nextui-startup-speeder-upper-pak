@@ -42,8 +42,13 @@ stock | partial)
 		busy "All set. Restarting..."
 		restart
 	fi
-	unbusy
-	say "That didn't work out, so nothing was changed."
+	if [ "$("$SPEEDER" state)" = stock ]; then
+		unbusy
+		say "That didn't work out, so nothing was changed."
+	else
+		unbusy
+		say "That didn't work out, and not everything could be put back.\nOpen Startup Speeder Upper again to put it back."
+	fi
 	;;
 fast)
 	before=$("$SPEEDER" field before)

@@ -46,7 +46,7 @@ put_u32() {
 sunxi_sum() {
 	hexdump -v -n "$3" -e '1/4 "%u\n"' "$1" | awk -v at=$(($2 / 4)) '
 		{ w = (NR - 1 == at) ? 1594518585 : $1; s = (s + w) % 4294967296 }
-		END { printf "%d\n", s }'
+		END { printf "%.0f\n", s }'
 }
 
 read_sectors() { dd if=$DISK of="$3" bs=512 skip="$1" count="$2" 2>/dev/null; }
@@ -87,7 +87,13 @@ pkg_state() {
 	esac
 }
 
-pkg_set() { write_sectors $PKG_PRIMARY "$TMP/pkg.$1" && log "boot package: $1"; }
+# Afterwards pkg.now is read again, so pkg_state tells what is on the disk now.
+pkg_set() {
+	write_sectors $PKG_PRIMARY "$TMP/pkg.$1"
+	local rc=$?
+	read_sectors $PKG_PRIMARY $(($(wc -c < "$TMP/pkg.stock") / 512)) "$TMP/pkg.now"
+	[ $rc = 0 ] && log "boot package: $1"
+}
 
 # ---- boot0: the first-stage loader -----------------------------------------
 # Byte 0x34 is its serial-output level (8 on stock, 0 is silent). boot0 holds
@@ -122,7 +128,10 @@ b0_set() {
 			write_sectors $B0_PRIMARY "$TMP/b0.first"
 	else
 		write_sectors $B0_PRIMARY "$TMP/b0.stock"
-	fi && log "boot0: $1"
+	fi
+	local rc=$?
+	read_sectors $B0_PRIMARY 128 "$TMP/b0.now"
+	[ $rc = 0 ] && log "boot0: $1"
 }
 
 # ---- U-Boot environment: kernel arguments -----------------------------------
@@ -171,13 +180,18 @@ gpu_pins() {
 	esac
 }
 
+# A swap cut short can leave TrimUI's driver under both names, or a stray .new;
+# both still count as stock, and gpu_set stock tidies them up.
 gpu_state() {
 	local now
 	now=$(sha $GPU)
-	if [ "$now" = "$GPU_STOCK" ] && [ ! -e $GPU_KEEP ]; then echo stock
+	if [ "$now" = "$GPU_STOCK" ] && { [ ! -e $GPU_KEEP ] || [ "$(sha $GPU_KEEP)" = "$GPU_STOCK" ]; }; then echo stock
 	elif [ "$now" = "$GPU_SMALL" ] && [ "$(sha $GPU_KEEP)" = "$GPU_STOCK" ]; then echo tweaked
 	else echo unknown; fi
 }
+
+gpu_leftovers() { [ -e $GPU_KEEP ] || [ -e $GPU.new ]; }
+gpu_tidy() { rm -f $GPU_KEEP $GPU.new; }
 
 # Runs $@ with /rom writable, and always makes it read-only again.
 with_rom_rw() {
@@ -205,7 +219,8 @@ gpu_set() {
 		tweaked:stock) with_rom_rw gpu_swap_in ;;
 		stock:tweaked) with_rom_rw gpu_swap_out ;;
 	esac
-	[ "$(gpu_state)" = "$1" ] && log "GPU driver: $1"
+	[ "$1:$(gpu_state)" = stock:stock ] && gpu_leftovers && with_rom_rw gpu_tidy
+	[ "$(gpu_state)" = "$1" ] && ! { [ "$1" = stock ] && gpu_leftovers; } && log "GPU driver: $1"
 }
 
 # ---- MainUI stand-in ---------------------------------------------------------
@@ -253,6 +268,16 @@ END="# <<< Startup Speeder Upper"
 
 has_block() { grep -q "^[[:space:]]*$BEGIN\$" "$1"; }
 
+# Every opening marker has its closing one, with nothing nested: otherwise
+# cutting the blocks out could take TrimUI's own lines with them.
+markers_ok() {
+	awk -v b="$BEGIN" -v e="$END" '
+		{ t = $0; gsub(/^[ \t]+|[ \t]+$/, "", t) }
+		t == b { if (open) bad = 1; open = 1 }
+		t == e { if (!open) bad = 1; open = 0 }
+		END { exit (bad || open) }' "$1"
+}
+
 strip_block() {
 	awk -v b="$BEGIN" -v e="$END" '
 		{ t = $0; gsub(/^[ \t]+|[ \t]+$/, "", t) }
@@ -268,7 +293,8 @@ replace_file() {
 }
 
 sd_state() {
-	[ -f $MOUNT_SCRIPT ] && grep -q '^start() {' $LAUNCHER || { echo unknown; return; }
+	[ -f $MOUNT_SCRIPT ] && grep -q '^start() {' $LAUNCHER && markers_ok $MOUNT_SCRIPT && markers_ok $LAUNCHER ||
+		{ echo unknown; return; }
 	if [ ! -e $SD_INIT ] && [ ! -e $SD_LINK ] && ! has_block $MOUNT_SCRIPT && ! has_block $LAUNCHER; then echo stock
 	elif cmp -s "$PAK_DIR/sdearly/startup-speeder-sd" $SD_INIT && [ -L $SD_LINK ] &&
 		has_block $MOUNT_SCRIPT && has_block $LAUNCHER; then echo tweaked
@@ -315,10 +341,12 @@ set_state() { # phase, before, after
 
 cmd_state() {
 	prepare || { echo "unknown $WHY"; return; }
+	# An undo cut short (say, by a power loss mid-write) can leave a primary
+	# bootloader copy damaged; undoing again rewrites it from TrimUI's backup.
+	[ "$(phase)" = undo ] && { echo undo; return; }
 	p=$(parts)
 	case " $p " in *" unknown "*) echo "unknown $p"; return ;; esac
 	case "$(phase)" in
-		undo) echo undo ;;
 		*) case "$p" in
 			"tweaked tweaked tweaked tweaked tweaked tweaked")
 				[ "$(phase)" = trial ] && echo trial || echo fast ;;
@@ -415,7 +443,7 @@ restart() {
 cmd_boot() {
 	. "$PAK_DIR/ui.sh"
 	case "$(phase)" in
-		undo) undo_and_restart "Putting everything back..." ;;
+		undo) undo_and_restart "Putting everything back..."; return 0 ;;
 		trial) ;;
 		*)
 			# No trial on this Brick: nothing to ask, and nothing to keep this hook for.
@@ -440,9 +468,13 @@ undo_and_restart() {
 		restart
 	fi
 	unbusy
-	# Restarting now could repeat this at every startup, so stop asking instead.
+	# Retrying at every startup could loop, so the hook goes; the tool itself
+	# offers the undo again (its state stays "undo").
 	rm -f "$HOOK"; sync
-	say "Not everything could be put back.\nOpen Startup Speeder Upper to try again."
+	tell "Not everything could be put back.\nOpen Startup Speeder Upper to try again." 10
+	# With the bootloader back to stock, one restart brings back a screen
+	# that the faster startup may have left dark.
+	[ "$(pkg_state):$(b0_state)" = stock:stock ] && restart
 }
 
 trap 'rm -rf "$TMP"' EXIT
