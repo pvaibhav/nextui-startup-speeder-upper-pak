@@ -45,11 +45,16 @@ effects.
 
 ## How the startup time is measured
 
-`bin/bootclock` reads the ARM counter, which starts at power-on, next to
-Linux's own clocks. The difference is the time before Linux started. Adding
-the moment NextUI started `keymon.elf` (from `/proc`) gives the time from
-power-on to NextUI. After the Brick has slept, the counter no longer lines up
-with Linux's clocks, so the tool then shows no time rather than a wrong one.
+Linux's own log starts at 0 when the kernel starts, so it can't show the
+bootloader's part, where most of the time goes. `bin/bootclock` reads the ARM
+counter, which starts at power-on, next to Linux's raw clock, which starts
+with the kernel. The difference is the time before Linux started. NTP doesn't
+adjust either clock, and both pause while the Brick sleeps, so the difference
+stays the same for as long as the Brick runs. On a Brick Pro it read 6599 ms
+before a 23-second sleep and 6598 ms after it.
+
+Adding the moment NextUI started `keymon.elf` (from `/proc`) gives the time
+from power-on to NextUI.
 
 ## Files
 

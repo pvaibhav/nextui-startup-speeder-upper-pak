@@ -356,19 +356,18 @@ cmd_state() {
 	esac
 }
 
+# The time before Linux started, plus when NextUI started keymon.elf (it runs
+# for as long as NextUI does). Stays right after a sleep: see src/bootclock.c.
 cmd_time() {
-	# shellcheck disable=SC2046 # three numbers, split on purpose
-	set -- $("$PAK_DIR/bin/bootclock" 2>/dev/null)
-	[ $# = 3 ] || return 0
-	# After a sleep the counter no longer matches Linux's clocks.
-	[ $(($3 - $2)) -lt 200 ] || return 0
+	pre=$("$PAK_DIR/bin/bootclock" 2>/dev/null) || return 0
+	case "$pre" in "" | *[!0-9]*) return 0 ;; esac
 	start=""
 	for pid in $(pidof keymon.elf); do
 		t=$(cut -d' ' -f22 /proc/$pid/stat 2>/dev/null)
 		[ -n "$t" ] && { [ -z "$start" ] || [ "$t" -lt "$start" ]; } && start=$t
 	done
 	[ -n "$start" ] || return 0
-	ms=$(($1 - $2 + start * 10))
+	ms=$((pre + start * 10))
 	[ $ms -gt 1000 ] && [ $ms -lt 60000 ] && echo $ms
 }
 
