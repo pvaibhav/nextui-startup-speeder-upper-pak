@@ -1,0 +1,12 @@
+# Boot package edits for TG3040, TrimUI firmware v1.1.1. Made by tools/gen-patches.py.
+# Each line: byte offset, new bytes (octal escapes), what it does.
+sectors 2144
+stock 9e3ae29b54a8c87f73b8168764cc24a3f77a9aa7a8873721c3122937aaad5a31
+tweaked 0e1eee4c4aa4f29a09c84ddd9192904ce9641c314b4cc4a291dbbb76ae44ab23
+20 \007\105\350\353 boot package checksum
+2060 \350\255\333\317 U-Boot checksum
+65394 \000\277 U-Boot prints no messages
+159954 \012\040 panel reset pulse 120 -> 10 ms
+653556 \012 jd9168 panel: wait after display-on 50 -> 10 ms
+1030828 \000\000\000\000 debug_mode 8 -> 0: U-Boot serial output off
+1030912 \000\000\000\000 burn_key 1 -> 0: no wait for a PC flashing tool

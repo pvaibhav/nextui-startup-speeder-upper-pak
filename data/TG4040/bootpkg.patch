@@ -1,0 +1,13 @@
+# Boot package edits for TG4040, TrimUI firmware v1.1.1. Made by tools/gen-patches.py.
+# Each line: byte offset, new bytes (octal escapes), what it does.
+sectors 2176
+stock 7e537bca7e5141d4536561d1041b869330f6d26f89d4c8c96ba26079c19c1aa2
+tweaked 91b9de74529862ab967a2def73b78d9244dd455d7bcc3d9c2f2a16853af3cb0d
+20 \145\017\113\372 boot package checksum
+2060 \261\263\074\305 U-Boot checksum
+65394 \000\277 U-Boot prints no messages
+159998 \012\040 panel reset pulse 120 -> 10 ms
+663420 \012 gh7003 panel: wait after display-on 250 -> 10 ms
+665724 \012 jd9168 panel: wait after display-on 50 -> 10 ms
+1047140 \000\000\000\000 debug_mode 8 -> 0: U-Boot serial output off
+1047224 \000\000\000\000 burn_key 1 -> 0: no wait for a PC flashing tool

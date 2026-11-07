@@ -1,0 +1,16 @@
+{
+  "name": "Startup Speeder Upper",
+  "version": "1.0.0",
+  "type": "TOOL",
+  "description": "Makes the TrimUI Brick, Brick Hammer and Brick Pro start up more than twice as fast. One button to speed it up, one to put it back.",
+  "author": "pvaibhav",
+  "repo_url": "https://github.com/pvaibhav/nextui-startup-speeder-upper-pak",
+  "release_filename": "Startup.Speeder.Upper.pakz",
+  "platforms": ["tg5040"],
+  "changelog": {
+    "1.0.0": "First release."
+  },
+  "screenshots": [],
+  "update_ignore": [],
+  "launch": "launch.sh"
+}

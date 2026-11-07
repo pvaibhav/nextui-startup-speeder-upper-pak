@@ -1,0 +1,9 @@
+# >>> Startup Speeder Upper
+# init starts this while startup-speeder-sd may still be mounting the card. If
+# a card is in, wait until it is mounted (at most 1 s), so the frontend's hook
+# finds it at once. Otherwise the hook's own wait applies, as on stock.
+i=0
+while [ -b /dev/mmcblk1 ] && ! grep -q ' /mnt/SDCARD ' /proc/mounts && [ $i -lt 50 ]; do
+	usleep 20000; i=$((i + 1))
+done
+# <<< Startup Speeder Upper

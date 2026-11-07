@@ -1,0 +1,8 @@
+# >>> Startup Speeder Upper
+# /etc/init.d/startup-speeder-sd may be mounting this card, or may have mounted it.
+if [ "$ACTION" = "add" ] && [ -n "$DEVNAME" ]; then
+	i=0
+	while [ -e /tmp/startup-speeder-sd.busy ] && [ $i -lt 100 ]; do usleep 20000; i=$((i + 1)); done
+	grep -q "^/dev/$DEVNAME " /proc/mounts && exit 0
+fi
+# <<< Startup Speeder Upper

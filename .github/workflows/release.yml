@@ -1,0 +1,43 @@
+name: Release
+
+# Push a tag equal to pak.json's version (for example 1.0.0, no "v"): Pak Store
+# downloads <repo>/releases/download/<version>/<release_filename>.
+on:
+  push:
+    tags: ["*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches pak.json
+        if: github.event_name == 'push'
+        run: test "$(jq -r .version pak.json)" = "$GITHUB_REF_NAME"
+
+      - name: Check the scripts
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          for f in launch.sh speeder.sh ui.sh sdearly/mount-guard sdearly/launcher-wait; do sh -n "$f"; done
+          shellcheck -s sh -S error launch.sh speeder.sh ui.sh
+
+      - name: Build
+        run: CC=gcc sh tools/build.sh
+
+      - name: Publish
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=$(jq -r --arg v "$GITHUB_REF_NAME" '.changelog[$v] // ""' pak.json)
+          gh release create "$GITHUB_REF_NAME" dist/Startup.Speeder.Upper.pakz --title "$GITHUB_REF_NAME" --notes "$notes"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Startup.Speeder.Upper.pakz
+          path: dist/Startup.Speeder.Upper.pakz

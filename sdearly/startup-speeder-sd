@@ -1,0 +1,41 @@
+#!/bin/sh /etc/rc.common
+# Startup Speeder Upper: mount the SD card when init starts, instead of when
+# its hotplug event is handled about two seconds later. The card ends up
+# mounted exactly as TrimUI's own mount script mounts it.
+START=00
+
+boot() {
+	touch /tmp/startup-speeder-sd.busy
+	sd_mount
+	rm -f /tmp/startup-speeder-sd.busy
+}
+
+sd_mount() {
+	for dev in mmcblk1p1 mmcblk1; do
+		[ -b /dev/$dev ] || continue
+		grep -q "^/dev/$dev " /proc/mounts && return 0
+		mkdir -p /mnt/SDCARD
+		type=disk; [ "$dev" = mmcblk1p1 ] && type=partition
+		# Go straight to the step of TrimUI's mount script that succeeds for
+		# this card, so exFAT and FAT cards end up mounted exactly as on stock:
+		# - exFAT: the plain mount the script falls back to after block's FAT
+		#   attempt and an NTFS probe fail. Naming the type skips the FAT try.
+		# - FAT12/16/32: block itself, with the options from /etc/config/fstab.
+		if [ "$(dd if=/dev/$dev bs=1 skip=3 count=5 2>/dev/null)" = "EXFAT" ]; then
+			mount -t exfat /dev/$dev /mnt/SDCARD -o rw,iocharset=utf8
+		else
+			ACTION=add DEVNAME=$dev DEVTYPE=$type /sbin/block hotplug
+		fi
+		if grep -q " /mnt/SDCARD " /proc/mounts; then
+			/usr/trimui/bin/init_lang.sh &
+			return 0
+		fi
+		# Anything else (NTFS, or a failure above): TrimUI's whole script.
+		ACTION=add DEVNAME=$dev DEVTYPE=$type /bin/sh /etc/hotplug.d/block/10-mount
+		grep -q " /mnt/SDCARD " /proc/mounts && return 0
+	done
+}
+
+start() {
+	boot
+}
