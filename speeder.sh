@@ -66,7 +66,8 @@ PKG_BACKUP=24576
 
 pkg_prepare() {
 	[ -f "$DATA/bootpkg.patch" ] || return 1
-	local n=$(sed -n 's/^sectors //p' "$DATA/bootpkg.patch")
+	local n
+	n=$(sed -n 's/^sectors //p' "$DATA/bootpkg.patch")
 	PKG_STOCK=$(sed -n 's/^stock //p' "$DATA/bootpkg.patch")
 	PKG_TWEAKED=$(sed -n 's/^tweaked //p' "$DATA/bootpkg.patch")
 	read_sectors $PKG_BACKUP "$n" "$TMP/pkg.stock" && [ "$(sha "$TMP/pkg.stock")" = "$PKG_STOCK" ] || return 1
@@ -136,7 +137,9 @@ env_state() {
 	[ "$(env_get boot_normal)" = 'sunxi_flash read 45000000 ${boot_partition};bootm 45000000' ] &&
 		[ "$(env_get bootcmd)" = 'run setargs_nand boot_normal' ] &&
 		[ "$(env_get boot_partition)" = boot ] || { echo unknown; return; }
-	local l=$(env_get loglevel) a=$(env_get setargs_mmc)
+	local l a
+	l=$(env_get loglevel)
+	a=$(env_get setargs_mmc)
 	if [ "$l" = 8 ] && [ "$a" = "$SETARGS_STOCK" ]; then echo stock
 	elif [ "$l" = 1 ] && [ "$a" = "$SETARGS_TWEAKED" ]; then echo tweaked
 	elif { [ "$l" = 8 ] || [ "$l" = 1 ]; } && { [ "$a" = "$SETARGS_STOCK" ] || [ "$a" = "$SETARGS_TWEAKED" ]; }; then echo partial
@@ -169,7 +172,8 @@ gpu_pins() {
 }
 
 gpu_state() {
-	local now=$(sha $GPU)
+	local now
+	now=$(sha $GPU)
 	if [ "$now" = "$GPU_STOCK" ] && [ ! -e $GPU_KEEP ]; then echo stock
 	elif [ "$now" = "$GPU_SMALL" ] && [ "$(sha $GPU_KEEP)" = "$GPU_STOCK" ]; then echo tweaked
 	else echo unknown; fi
@@ -325,6 +329,7 @@ cmd_state() {
 }
 
 cmd_time() {
+	# shellcheck disable=SC2046 # three numbers, split on purpose
 	set -- $("$PAK_DIR/bin/bootclock" 2>/dev/null)
 	[ $# = 3 ] || return 0
 	# After a sleep the counter no longer matches Linux's clocks.
