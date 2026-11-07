@@ -1,65 +1,67 @@
 # Startup Speeder Upper
 
-A NextUI tool that makes the TrimUI Brick, Brick Hammer and Brick Pro start
-up more than twice as fast. One button speeds it up, and the same tool puts
-it back.
+Makes the TrimUI Brick, Brick Hammer and Brick Pro start in under 6 seconds
+instead of 15. One button to speed up, one button to undo.
 
-| | Before | After |
-|---|---|---|
-| Brick Pro, USB cable plugged in | 15.5 s | about 6 s |
-| Brick Pro, no cable | about 12.5 s | about 6 s |
+| Before | After |
+|---|---|
+| 14.9 s | 5.8 s |
 
-Times are from switching on to NextUI starting.
+![Your Brick took 14.9 seconds to start. Let's dunk that down to about 6.](docs/screenshots/offer.png)
 
 ## Install
 
-- **Pak Store:** find Startup Speeder Upper under Miscellaneous Tools.
-- **By hand:** copy `Startup.Speeder.Upper.pakz` from the
-  [latest release](https://github.com/pvaibhav/nextui-startup-speeder-upper-pak/releases/latest)
-  to the root of the SD card, and restart the Brick. NextUI unpacks it.
+Find it in Pak Store under Miscellaneous Tools. Or copy
+`Startup.Speeder.Upper.pakz` from the
+[latest release](https://github.com/pvaibhav/nextui-startup-speeder-upper-pak/releases/latest)
+to the SD card's root and restart.
 
 ## Use
 
-1. Open **Tools → Startup Speeder Upper**. It tells you how long your last
-   startup took and asks: "Do you want to make the startup faster?"
-2. Press **A**. The Brick restarts.
-3. After the restart it asks "Keep the changes?". Press **A** to keep them.
+1. Open Startup Speeder Upper in **Tools** and press **A**.
+2. The Brick restarts. Faster.
+3. Press **A** at "Keep the changes?".
 
-If you press **B**, or don't answer within 15 seconds, everything goes back to
-how TrimUI shipped it and the Brick restarts again. That also covers a screen
-that stays dark after the first fast startup.
+![Started in 5.9 sec. Keep the changes?](docs/screenshots/keep.png)
 
-To undo it later, open the tool again and press **A** at "remove the tweaks?".
+**B**, or no answer for 15 seconds, puts everything back and restarts.
 
-## What it needs
+There is a slight chance one of the tweaks garbles your Brick's screen, it's
+harmless, but if you can't see nothing we'll undo the changes after waiting a
+bit.
 
-- A TrimUI Brick, Brick Hammer or Brick Pro on TrimUI's firmware 1.1.1. On
-  anything else, the tool says so and changes nothing. It does not work on
-  the TrimUI Smart Pro.
-- NextUI with boot hooks (`.userdata/tg5040/.hooks`).
+Open the tool again to see the seconds you're saving, or to go back to the
+slow lane.
 
-## What it changes
+![That's 9.0 seconds less waiting. Remove the tweaks?](docs/screenshots/fast-lane.png)
 
-All of it lives on the Brick's internal storage. The SD card only holds this
-tool, plus a small startup hook while it waits for your answer.
+## Needs
 
-- The bootloader doesn't wait for a PC flashing tool, and doesn't print
-  messages nobody can see.
-- The screen gets switched on with shorter waits.
-- Linux prints fewer messages, and starts a little leaner.
-- The SD card is mounted as soon as the system starts.
-- Smaller copies of two files that are read at every startup: the graphics
-  driver (without its debug data) and the file NextUI reads to learn the model.
+- A Brick, Brick Hammer or Brick Pro on TrimUI firmware 1.1.1. Anything else
+  gets a polite no.
+- NextUI with startup hooks.
 
-TrimUI's backup copies of the bootloader are never written. If a changed
-copy were ever damaged, the Brick starts from the backup as stock.
+## What the Brick stops doing
 
-How each change works, and how it was measured: [docs/how-it-works.md](docs/how-it-works.md).
+- Waiting for a computer's flashing tool that isn't there.
+- Printing boot messages to a serial port nobody's listening to.
+- Napping for up to 250 ms at a time while switching on the screen.
+- Setting up 16 RAM disks. It gets one.
+- Loading 21 MB of GPU driver debug data.
+- Reading TrimUI's 2 MB menu program just to learn its own model name.
+- Waiting for a hotplug event before mounting the SD card.
+
+TrimUI's backup copies of the bootloader are never touched. Details and
+safety nets: [docs/how-it-works.md](docs/how-it-works.md).
+
+## Credits
+
+The tweaks come from boot research for [BaseOS](https://github.com/pvaibhav/BaseOS),
+which starts Anbernic handhelds in about 4 seconds.
 
 ## Building
 
-`tools/build.sh` writes `dist/Startup.Speeder.Upper.pakz`. It downloads
-minui-presenter and builds the boot timer with Docker. Pushing a tag equal to
+`tools/build.sh` writes `dist/Startup.Speeder.Upper.pakz`. A tag matching
 the version in `pak.json` publishes a release.
 
 [MIT License](LICENSE). Third-party files: [THIRD-PARTY.md](THIRD-PARTY.md).

@@ -1,73 +1,73 @@
-# How Startup Speeder Upper works
+# How it works
 
-The tweaks come from boot-time research on the Brick Hammer and Brick Pro in
-the BaseOS project (`brick/research/boot-tweaks-results.md` there). Each one
-was measured on its own, and kept only when it saved time without side
-effects.
+A stock Brick spends most of its 15-second startup waiting. Each tweak below
+was measured on its own on a Brick Pro and Hammer, and kept only if it saved
+time and broke nothing.
 
 ## The tweaks
 
-| Part | Change | Saves (Brick Pro) |
+| Part | Change | Saves |
 |---|---|---|
-| Boot package (U-Boot) | No wait for a PC flashing tool at power-on (`burn_key` 1 → 0) | 0.8 s, or about 3.3 s with a USB cable to a PC |
-| Boot package (U-Boot) | No serial output (`debug_mode` 8 → 0), no level-0 messages (`pr_msg` check skipped) | about 0.4 s |
-| Boot package (U-Boot) | Panel reset pulse 120 → 10 ms; wait after display-on 50 → 10 ms (jd9168) and 250 → 10 ms (gh7003) | 0.3–0.5 s |
-| boot0 | No serial output (header byte 0x34, 8 → 0) | about 0.15 s |
-| U-Boot environment | `loglevel=1`; `rcupdate.rcu_expedited=1 rcupdate.rcu_normal_after_boot=1 brd.rd_nr=1` | about 2.4 s |
-| System partition | GPU driver without its 21 MB of debug data | about 0.2 s |
-| Overlay | `MainUI` stand-in: a 200-byte script with the same model lines, so `strings MainUI` is quick | about 0.1 s |
-| Overlay | SD card mounted when init starts, not on its hotplug event | about 1.6 s |
+| U-Boot | `burn_key` 1 to 0: no wait for a computer's flashing tool | 0.8 s, 3.3 s with a computer attached |
+| U-Boot | `debug_mode` 8 to 0, `pr_msg` check skipped: no serial output | 0.4 s |
+| U-Boot | Panel reset pulse 120 to 10 ms. Wait after display-on 50 to 10 ms (jd9168) or 250 to 10 ms (gh7003) | 0.3 to 0.5 s |
+| boot0 | Header byte 0x34, 8 to 0: no serial output | 0.15 s |
+| U-Boot env | `loglevel=1 rcupdate.rcu_expedited=1 rcupdate.rcu_normal_after_boot=1 brd.rd_nr=1` | 2.4 s |
+| `/rom` | GPU driver minus 21 MB of debug data | 0.2 s |
+| Overlay | `MainUI` replaced by a 200-byte script with the same model lines, for `strings MainUI` | 0.1 s |
+| Overlay | SD card mounted when init starts, not on its hotplug event | 1.6 s |
 
-## Safety
+## Safety nets
 
-- **Pinned inputs.** The boot package edits are a table of byte offsets
-  (`data/<model>/bootpkg.patch`, made by `tools/gen-patches.py`). They are
-  applied to a copy of TrimUI's backup boot package, and the result must
-  match a pinned hash before it is written. A Brick whose backup isn't
-  TrimUI's v1.1.1 package is left alone.
-- **Backups untouched.** Only the primary boot0 (sector 16) and boot package
-  (sector 32800) are written. The backups (sectors 256 and 24576) are never
-  written. A primary with a bad checksum makes the Brick start from its backup,
-  so a write cut short by a power loss gives a stock startup.
-- **Every write is read back** and compared.
-- **The trial.** Before the first change, the tool records a trial on the
-  Brick (`/etc/startup-speeder-upper`) and puts a startup hook on the SD card
-  (`.userdata/tg5040/.hooks/boot.d/startup-speeder-upper.sync.sh`). At the next
-  startup the hook asks "Keep the changes?" for 15 seconds, before NextUI's
-  menu. Only **A** keeps them. **B**, no answer, or a question that can't be
-  shown puts everything back and restarts. An install cut short also ends in
-  that question.
-- **Undo is exact.** The boot package and boot0 primaries are copied back from
-  TrimUI's backups. The environment gets TrimUI's values. TrimUI's GPU driver
-  stays on the system partition under another name (`pvrsrvkm.ko.trimui`, a
-  rename, not a copy) and is renamed back. The overlay files are deleted, and
-  the marked blocks are cut out of TrimUI's two scripts.
+- **Pinned hashes.** The boot package edits (`data/<model>/bootpkg.patch`,
+  from `tools/gen-patches.py`) go onto a copy of TrimUI's backup package. The
+  result must match a pinned hash, or nothing gets written. Unknown firmware
+  gets left alone.
+- **Backups stay stock.** Only the primaries get written: boot0 at sector 16
+  and the boot package at 32800. The backups at 256 and 24576 never change.
+  A damaged primary makes the Brick boot the backup, so a power cut mid-write
+  means a stock startup.
+- **Every write gets read back** and compared.
+- **Trial first.** Before changing anything, the tool records a trial in
+  `/etc/startup-speeder-upper` and adds a boot hook on the SD card. Next
+  startup, the hook asks "Keep the changes?" for 15 seconds. Only **A**
+  keeps them. Anything else undoes everything and restarts.
+- **Exact undo.** The boot package and boot0 come back from TrimUI's backups,
+  the env gets TrimUI's values, and TrimUI's GPU driver, parked next to the
+  small one as `pvrsrvkm.ko.trimui`, gets renamed back. The overlay files and
+  marked script blocks get deleted.
 
-## How the startup time is measured
+## Measuring the startup
 
-Linux's own log starts at 0 when the kernel starts, so it can't show the
-bootloader's part, where most of the time goes. `bin/bootclock` reads the ARM
-counter, which starts at power-on, next to Linux's raw clock, which starts
-with the kernel. The difference is the time before Linux started. NTP doesn't
-adjust either clock, and both pause while the Brick sleeps, so the difference
-stays the same for as long as the Brick runs. On a Brick Pro it read 6599 ms
-before a 23-second sleep and 6598 ms after it.
+The kernel log starts at 0 when Linux does, after the bootloader has already
+burned most of the time. So `bin/bootclock` compares the ARM counter, which
+starts at power-on, with Linux's raw clock. The difference is the time before
+Linux. NTP adjusts neither clock and both pause during sleep, so the number
+holds all day: 6599 ms before a 23-second sleep, 6598 ms after. Add when
+NextUI started `keymon.elf`, and that's the startup time.
 
-Adding the moment NextUI started `keymon.elf` (from `/proc`) gives the time
-from power-on to NextUI.
+## What goes where
 
-## Files
+The tool keeps three things on the SD card:
 
-| On the SD card | |
+| Path on the SD card | What it is |
 |---|---|
-| `Tools/tg5040/Startup Speeder Upper.pak/` | the tool |
-| `.userdata/tg5040/.hooks/boot.d/startup-speeder-upper.sync.sh` | only during the trial |
-| `.userdata/tg5040/logs/Startup Speeder Upper.txt` | what it changed, and when |
+| `Tools/tg5040/Startup Speeder Upper.pak/` | the tool itself |
+| `.userdata/tg5040/.hooks/boot.d/startup-speeder-upper.sync.sh` | the "Keep the changes?" question at startup, there only until you answer |
+| `.userdata/tg5040/logs/Startup Speeder Upper.txt` | a log of what it changed |
 
-| On the Brick | |
+Everything else goes on the Brick's internal storage, so the speed-up stays
+even if you swap SD cards:
+
+| Path on the Brick | What it is |
 |---|---|
-| `/etc/startup-speeder-upper` | trial state and the two startup times |
-| `/etc/init.d/startup-speeder-sd`, `/etc/rc.d/S00startup-speeder-sd` | early SD mount |
-| marked blocks in `/etc/hotplug.d/block/10-mount`, `/etc/init.d/runtrimui` | keep TrimUI's mount in step |
-| `/usr/trimui/bin/MainUI` (overlay) | stand-in |
-| `/rom/lib/modules/4.9.191/pvrsrvkm.ko`, `.trimui` | small driver, TrimUI's driver |
+| `/etc/startup-speeder-upper` | whether you're in the trial or kept the changes, plus the before and after times |
+| `/etc/init.d/startup-speeder-sd`, `/etc/rc.d/S00startup-speeder-sd` | the script that mounts the SD card early |
+| marked blocks in TrimUI's `/etc/hotplug.d/block/10-mount` and `/etc/init.d/runtrimui` | TrimUI's mount code skips a card that's already mounted, and its launcher waits up to 1 second for the card |
+| `/usr/trimui/bin/MainUI` | the 200-byte stand-in for TrimUI's menu program |
+| `/rom/lib/modules/4.9.191/pvrsrvkm.ko` | the GPU driver without its debug data |
+| `/rom/lib/modules/4.9.191/pvrsrvkm.ko.trimui` | TrimUI's original GPU driver, kept for the undo |
+
+The bootloader and kernel settings aren't files. The tool writes them
+straight to the primary boot0 and boot package on the internal storage, and
+to U-Boot's settings (its environment).
