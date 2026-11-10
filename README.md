@@ -11,10 +11,15 @@ instead of 15. One button to speed up, one button to undo.
 
 ## Install
 
-Find it in Pak Store under System. Or copy
+**On NextUI:** find it in Pak Store under System. Or copy
 `Startup.Speeder.Upper.pakz` from the
 [latest release](https://github.com/pvaibhav/nextui-startup-speeder-upper-pak/releases/latest)
 to the SD card's root and restart.
+
+**On anything else:** plug the Brick into a computer and open the
+[web installer](https://pvaibhav.github.io/nextui-startup-speeder-upper-pak/)
+in Chrome or Edge. It asks the same questions, on a web page. No SD card
+needed.
 
 ## Use
 
@@ -39,7 +44,7 @@ slow lane.
 
 - A Brick, Brick Hammer or Brick Pro on TrimUI firmware 1.1.1. Anything else
   gets a polite no.
-- NextUI with startup hooks.
+- NextUI with startup hooks, or the web installer and a USB cable.
 
 ## What the Brick stops doing
 
@@ -51,8 +56,8 @@ slow lane.
 - Reading TrimUI's 2 MB menu program just to learn its own model name.
 - Waiting for a hotplug event before mounting the SD card.
 
-TrimUI's backup copies of the bootloader are never touched. Details and
-safety nets: [docs/how-it-works.md](docs/how-it-works.md).
+Undo puts everything back exactly the way TrimUI shipped it. For the curious:
+[docs/how-it-works.md](docs/how-it-works.md).
 
 ## Credits
 
@@ -64,7 +69,8 @@ by Jose Diaz-Gonzalez.
 
 ## Building
 
-`tools/build.sh` writes `dist/Startup.Speeder.Upper.pakz`. A tag matching
-the version in `pak.json` publishes a release.
+`tools/build.sh` writes `dist/Startup.Speeder.Upper.pakz` and the web
+installer in `dist/web`. A tag matching the version in `pak.json` publishes
+both. The "Web installer" workflow, run by hand, publishes the page alone.
 
 [MIT License](LICENSE). Third-party files: [THIRD-PARTY.md](THIRD-PARTY.md).

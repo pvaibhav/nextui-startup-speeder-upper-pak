@@ -1,7 +1,9 @@
 name: Release
 
 # Push a tag equal to pak.json's version (for example 1.0.0, no "v"): Pak Store
-# downloads <repo>/releases/download/<version>/<release_filename>.
+# downloads <repo>/releases/download/<version>/<release_filename>. The same tag
+# puts the web installer on GitHub Pages (set Pages to "GitHub Actions" in the
+# repository's settings).
 on:
   push:
     tags: ["*"]
@@ -9,6 +11,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   release:
@@ -25,6 +29,7 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
           for f in launch.sh speeder.sh ui.sh sdearly/mount-guard sdearly/launcher-wait; do sh -n "$f"; done
           shellcheck -s sh -S warning -e SC3043 launch.sh speeder.sh ui.sh
+          for f in web/*.js; do node --check "$f"; done
 
       - name: Build
         run: CC=gcc sh tools/build.sh
@@ -41,3 +46,23 @@ jobs:
         with:
           name: Startup.Speeder.Upper.pakz
           path: dist/Startup.Speeder.Upper.pakz
+
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name == 'push'
+        with:
+          path: dist/web
+
+  web:
+    if: github.event_name == 'push'
+    needs: release
+    runs-on: ubuntu-24.04
+    # One Pages deploy at a time, shared with web.yml.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

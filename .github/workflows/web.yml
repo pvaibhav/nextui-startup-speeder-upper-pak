@@ -1,0 +1,39 @@
+name: Web installer
+
+# A release tag publishes the page together with the pak (release.yml). This
+# one is run by hand from the Actions tab, for a fix to the page alone.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04-arm
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the scripts
+        run: |
+          sh -n speeder.sh
+          for f in web/*.js; do node --check "$f"; done
+
+      - name: Build
+        run: CC=gcc sh tools/build.sh
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/web
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

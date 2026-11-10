@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build dist/Startup.Speeder.Upper.pakz: unzip it onto the SD card's root, or
-# let NextUI or Pak Store do that.
+# let NextUI or Pak Store do that. Also builds dist/web, the web installer.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -44,3 +44,32 @@ for model in TG3040 TG4040; do
 done
 (cd dist && zip -qrX "Startup.Speeder.Upper.pakz" Tools)
 echo "dist/Startup.Speeder.Upper.pakz ($(du -h "dist/Startup.Speeder.Upper.pakz" | cut -f1))"
+
+# The web installer: the page, and the files it sends to a Brick over USB.
+# manifest.json lists them with their hashes; the page checks each on arrival.
+WEB=dist/web
+KIT=$WEB/kit
+mkdir -p "$KIT/bin" "$KIT/sdearly"
+cp web/index.html web/app.js web/adb.js web/installer.js "$WEB/"
+cp speeder.sh "$KIT/"
+cp build/bootclock "$KIT/bin/bootclock"
+cp sdearly/startup-speeder-sd sdearly/mount-guard sdearly/launcher-wait "$KIT/sdearly/"
+cp -R data "$KIT/data"
+sum() { shasum -a 256 "$1" | cut -d' ' -f1; }
+{
+	printf '{\n  "version": "%s",\n  "files": [\n' "$(sed -n 's/.*"version": *"\(.*\)".*/\1/p' pak.json)"
+	sep=""
+	(cd "$KIT" && find . -type f ! -name manifest.json | sed 's|^\./||' | LC_ALL=C sort) | while read -r f; do
+		mode=420
+		case "$f" in speeder.sh | bin/* | sdearly/startup-speeder-sd) mode=493 ;; esac
+		model=""
+		case "$f" in data/*) model=$(echo "$f" | cut -d/ -f2) ;; esac
+		printf '%s    {"path": "%s", "mode": %s, "sha256": "%s"' "$sep" "$f" "$mode" "$(sum "$KIT/$f")"
+		[ -n "$model" ] && printf ', "model": "%s"' "$model"
+		printf '}'
+		sep=",
+"
+	done
+	printf '\n  ]\n}\n'
+} > "$KIT/manifest.json"
+echo "$WEB ($(du -sh "$WEB" | cut -f1))"

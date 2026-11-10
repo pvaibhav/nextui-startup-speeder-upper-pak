@@ -32,6 +32,9 @@ time and broke nothing.
   `/etc/startup-speeder-upper` and adds a boot hook on the SD card. Next
   startup, the hook asks "Keep the changes?" for 15 seconds. Only **A**
   keeps them. Anything else undoes everything and restarts.
+- **Trial without a screen.** The web installer can't ask on the Brick, so
+  it asks on the web page. A start script on the Brick waits for the answer.
+  With none 2 minutes after the startup, it undoes everything and restarts.
 - **Exact undo.** The boot package and boot0 come back from TrimUI's backups,
   the env gets TrimUI's values, and TrimUI's GPU driver, parked next to the
   small one as `pvrsrvkm.ko.trimui`, gets renamed back. The overlay files and
@@ -44,11 +47,26 @@ burned most of the time. So `bin/bootclock` compares the ARM counter, which
 starts at power-on, with Linux's raw clock. The difference is the time before
 Linux. NTP adjusts neither clock and both pause during sleep, so the number
 holds all day: 6599 ms before a 23-second sleep, 6598 ms after. Add when
-NextUI started `keymon.elf`, and that's the startup time.
+NextUI started `keymon.elf`, and that's the startup time. Without NextUI, it's
+when TrimUI's `MainUI` started.
+
+## The web installer
+
+The page in `web/` talks adb to the Brick over WebUSB. TrimUI's adb asks for
+no key, so `web/adb.js` is a small client of its own with no libraries. The
+page sends the same `speeder.sh` the pak uses to the Brick's `/tmp`, checks
+each file's hash on arrival, and runs it.
+
+TrimUI's launcher resets the USB port once while the Brick starts, which
+drops the connection. So the page changes nothing until the menu program
+runs.
+
+`tools/web-test.mjs` runs the page's code against a real Brick from Node.
 
 ## What goes where
 
-The tool keeps three things on the SD card:
+The NextUI pak keeps three things on the SD card. The web installer keeps
+nothing there, and runs from the Brick's `/tmp`.
 
 | Path on the SD card | What it is |
 |---|---|
@@ -62,6 +80,7 @@ even if you swap SD cards:
 | Path on the Brick | What it is |
 |---|---|
 | `/etc/startup-speeder-upper` | whether you're in the trial or kept the changes, plus the before and after times |
+| `/etc/init.d/startup-speeder-trial`, `/etc/rc.d/S98startup-speeder-trial`, `/etc/startup-speeder-upper.d/` | the web installer's trial timer and the copy of the tool it runs, there only until you answer |
 | `/etc/init.d/startup-speeder-sd`, `/etc/rc.d/S00startup-speeder-sd` | the script that mounts the SD card early |
 | marked blocks in TrimUI's `/etc/hotplug.d/block/10-mount` and `/etc/init.d/runtrimui` | TrimUI's mount code skips a card that's already mounted, and its launcher waits up to 1 second for the card |
 | `/usr/trimui/bin/MainUI` | the 200-byte stand-in for TrimUI's menu program |

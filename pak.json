@@ -1,6 +1,6 @@
 {
   "name": "Startup Speeder Upper",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "TOOL",
   "description": "Makes the TrimUI Brick, Brick Hammer and Brick Pro start in under 6 seconds instead of 15. One button to speed up, one button to undo.",
   "author": "pvaibhav",
@@ -8,6 +8,7 @@
   "release_filename": "Startup.Speeder.Upper.pakz",
   "platforms": ["tg5040"],
   "changelog": {
+    "1.1.0": "Now compatible with the web installer.",
     "1.0.0": "First release."
   },
   "screenshots": [
