@@ -1,12 +1,20 @@
 #!/bin/sh
 # Startup Speeder Upper: the part that changes the Brick. launch.sh is the UI.
 #
-#   speeder.sh state        prints: stock, partial, fast, trial, undo, or "unknown <why>"
+#   speeder.sh state        prints: stock, partial, restart, trial, fast, undo, or "unknown <why>"
+#                           (restart: installed, and not restarted since)
 #   speeder.sh time         prints the last startup time in milliseconds, or nothing
-#   speeder.sh install MS   applies every tweak; MS is the stock startup time (or "")
-#   speeder.sh keep         ends the trial: keeps the tweaks and removes the boot hook
+#   speeder.sh install MS [web]  applies every tweak; MS is the stock startup time (or "")
+#   speeder.sh keep [MS]    ends the trial and keeps the tweaks
 #   speeder.sh remove       puts everything back the way TrimUI shipped it
-#   speeder.sh boot         run by the boot hook on the first startup after install
+#   speeder.sh boot         run by NextUI's boot hook on the first startup after install
+#   speeder.sh watch        run by the trial timer on the first startup after a web install
+#   speeder.sh left         prints the seconds left to answer a web install's trial
+#   speeder.sh restart      restarts the Brick
+#
+# The first startup after an install is a trial. The NextUI pak asks "Keep the
+# changes?" on the Brick's screen. The web installer asks on the web page, and
+# a timer on the Brick puts everything back if no answer arrives.
 #
 # Every tweak is checked before and after it is written. The bootloader copies
 # that are changed always keep TrimUI's backup copy next to them: a damaged
@@ -15,11 +23,18 @@
 PAK_DIR=$(cd "$(dirname "$0")" && pwd)
 PATH="$PATH:/sbin:/usr/sbin"
 STATE=/etc/startup-speeder-upper
-TMP=/tmp/startup-speeder-upper
+TMP=/tmp/startup-speeder-upper.$$
+LOCK=/tmp/startup-speeder-upper.lock
 : "${SDCARD_PATH:=/mnt/SDCARD}"
 : "${USERDATA_PATH:=$SDCARD_PATH/.userdata/tg5040}"
+: "${SYSTEM_PATH:=$SDCARD_PATH/.system/tg5040}"
 HOOK="$USERDATA_PATH/.hooks/boot.d/startup-speeder-upper.sync.sh"
-LOG="$USERDATA_PATH/logs/Startup Speeder Upper.txt"
+# Without NextUI's folder on the card (or without a card) the log stays off it.
+if [ -d "$USERDATA_PATH" ]; then
+	LOG="$USERDATA_PATH/logs/Startup Speeder Upper.txt"
+else
+	LOG=/tmp/startup-speeder-upper.log
+fi
 DISK=/dev/mmcblk0
 
 log() { echo "$(cut -d' ' -f1 /proc/uptime) $*" >> "$LOG"; }
@@ -335,34 +350,45 @@ parts() { echo "$(pkg_state) $(b0_state) $(env_state) $(gpu_state) $(mainui_stat
 
 phase() { sed -n 's/^phase=//p' $STATE 2>/dev/null; }
 field() { sed -n "s/^$1=//p" $STATE 2>/dev/null; }
-set_state() { # phase, before, after
-	printf 'phase=%s\nbefore=%s\nafter=%s\n' "$1" "$2" "$3" > $STATE.new && sync && mv -f $STATE.new $STATE && sync
+boot_id() { cat /proc/sys/kernel/random/boot_id 2>/dev/null; }
+# A trial counts from the startup after the install: until then nobody has
+# seen the Brick start with the changes.
+trial_started() { [ "$(field boot)" != "$(boot_id)" ]; }
+# Who asks about a trial: the web page with its timer, or NextUI's boot hook.
+# Whatever the other one left behind stands down when it sees this.
+web_trial() { [ "$(field via)" = web ]; }
+set_state() { # phase, before, after, [boot id of the install, web or pak]
+	printf 'phase=%s\nbefore=%s\nafter=%s\nboot=%s\nvia=%s\n' "$1" "$2" "$3" "$4" "$5" > $STATE.new && sync && mv -f $STATE.new $STATE && sync
 }
 
 cmd_state() {
-	prepare || { echo "unknown $WHY"; return; }
 	# An undo cut short (say, by a power loss mid-write) can leave a primary
 	# bootloader copy damaged; undoing again rewrites it from TrimUI's backup.
 	[ "$(phase)" = undo ] && { echo undo; return; }
+	prepare || { echo "unknown $WHY"; return; }
 	p=$(parts)
 	case " $p " in *" unknown "*) echo "unknown $p"; return ;; esac
 	case "$(phase)" in
 		*) case "$p" in
 			"tweaked tweaked tweaked tweaked tweaked tweaked")
-				[ "$(phase)" = trial ] && echo trial || echo fast ;;
+				if [ "$(phase)" != trial ]; then echo fast
+				elif trial_started; then echo trial
+				else echo restart; fi ;;
 			"stock stock stock stock stock stock") echo stock ;;
 			*) echo partial ;;
 		esac ;;
 	esac
 }
 
-# The time before Linux started, plus when NextUI started keymon.elf (it runs
-# for as long as NextUI does). Stays right after a sleep: see src/bootclock.c.
+# The time before Linux started, plus when the frontend started: NextUI's
+# keymon.elf (it runs for as long as NextUI does), or else TrimUI's MainUI.
+# Stays right after a sleep: see src/bootclock.c.
 cmd_time() {
 	pre=$("$PAK_DIR/bin/bootclock" 2>/dev/null) || return 0
 	case "$pre" in "" | *[!0-9]*) return 0 ;; esac
 	start=""
-	for pid in $(pidof keymon.elf); do
+	pids=$(pidof keymon.elf) || pids=$(pidof MainUI)
+	for pid in $pids; do
 		t=$(cut -d' ' -f22 /proc/$pid/stat 2>/dev/null)
 		[ -n "$t" ] && { [ -z "$start" ] || [ "$t" -lt "$start" ]; } && start=$t
 	done
@@ -397,6 +423,121 @@ write_hook() {
 EOF
 }
 
+# ---- trial timer for web installs ---------------------------------------------
+# A web install has nobody to ask on the Brick's screen. A start script runs
+# "speeder.sh watch" from a small copy of this tool on the internal storage.
+# The web page answers with "keep" or "remove"; with no answer $WATCH_SECS
+# seconds after the startup, everything goes back to stock.
+
+KIT=/etc/startup-speeder-upper.d
+WATCH_INIT=/etc/init.d/startup-speeder-trial
+# Before S99runtrimui, which never returns.
+WATCH_LINK=/etc/rc.d/S98startup-speeder-trial
+WATCH_SECS=120
+WATCH_PID=/tmp/startup-speeder-upper.watch
+
+# An earlier trial's timer may be in place (an install that stopped halfway,
+# tried again). A copy that can run is there at every moment: the new one is
+# complete before the old one steps aside as $KIT.old, which the start script
+# falls back to.
+watch_install() {
+	rm -rf $KIT.new && mkdir -p "$KIT.new/data/$MODEL" &&
+		cp "$PAK_DIR/speeder.sh" $KIT.new/speeder.sh && chmod 0755 $KIT.new/speeder.sh &&
+		cp "$DATA/bootpkg.patch" "$KIT.new/data/$MODEL/bootpkg.patch" &&
+		cat > $WATCH_INIT.new <<EOF && chmod 0755 $WATCH_INIT.new && sh -n $WATCH_INIT.new && sync || return 1
+#!/bin/sh /etc/rc.common
+# Startup Speeder Upper: after a web install, puts everything back unless the
+# web page says to keep the changes. Removes itself once that is settled.
+START=98
+
+start() {
+	for kit in $KIT $KIT.old; do
+		[ -x \$kit/speeder.sh ] || continue
+		\$kit/speeder.sh watch < /dev/null > /dev/null 2>&1 9>&- &
+		break
+	done
+}
+EOF
+	mv -f $WATCH_INIT.new $WATCH_INIT && ln -sf ../init.d/startup-speeder-trial $WATCH_LINK && sync || return 1
+	# After a swap that was cut short, $KIT.old may be the only copy: it
+	# stays until the new one is in place.
+	if [ -e $KIT ]; then rm -rf $KIT.old && mv $KIT $KIT.old || return 1; fi
+	mv $KIT.new $KIT && sync && rm -rf $KIT.old && sync
+}
+
+watch_remove() { rm -rf $WATCH_LINK $WATCH_INIT $WATCH_INIT.new $KIT $KIT.new $KIT.old; sync; }
+watch_present() { [ -L $WATCH_LINK ] || [ -e $WATCH_INIT ] || [ -e $KIT ] || [ -e $KIT.old ]; }
+
+uptime_s() { cut -d. -f1 /proc/uptime; }
+
+# Only while the timer runs: it starts with the Brick, not with the install.
+cmd_left() {
+	[ "$(phase)" = trial ] && web_trial && kill -0 "$(cat $WATCH_PID 2>/dev/null)" 2>/dev/null || return 0
+	left=$((WATCH_SECS - $(uptime_s)))
+	[ $left -gt 0 ] && echo $left || echo 0
+}
+
+cmd_watch() {
+	case "$(phase)" in
+		undo | trial) ;;
+		*) watch_remove; return 0 ;;
+	esac
+	echo $$ > $WATCH_PID
+	# An undo that was cut short is finished right away. A trial waits.
+	while [ "$(phase)" = trial ] && web_trial && trial_started && [ "$(uptime_s)" -lt $WATCH_SECS ]; do sleep 2; done
+	# The page may be answering right now: then it holds the lock, and the
+	# phase tells what it did.
+	while ! lock; do
+		sleep 2
+		case "$(phase)" in undo | trial) ;; *) return 0 ;; esac
+	done
+	case "$(phase)" in
+		trial)
+			# The pak's trial now: its boot hook asks, and this timer goes.
+			web_trial || { watch_remove; return 0; }
+			# Installed again since this startup: that trial has its own
+			# timer, from its own first startup on.
+			trial_started || return 0
+			log "no answer $WATCH_SECS s after the startup" ;;
+		undo) ;;
+		*) return 0 ;;
+	esac
+	cmd_remove
+	case $? in
+		0) restart ;;
+		# Nothing was tried: the timer stays and tries at the next startup.
+		2) return 1 ;;
+	esac
+	# Retrying a failed undo at every startup could loop, so the timer goes;
+	# the installer offers the undo again (the state stays "undo").
+	watch_remove
+	# With the bootloader back to stock, one restart brings back a screen
+	# that the faster startup may have left dark. Never while the timer is
+	# still there: it would run, fail and restart again at every startup.
+	! watch_present && [ "$(pkg_state):$(b0_state)" = stock:stock ] && restart
+}
+
+# ---- one change at a time -----------------------------------------------------
+
+# The kernel holds the lock for as long as descriptor 9 is open, so it goes
+# when the holder does, however that ends. Programs started meanwhile must
+# not keep it open after the holder has gone: see "9>&-" here and in ui.sh.
+LOCKED=""
+lock() {
+	[ -n "$LOCKED" ] && return 0
+	# A failed redirection on exec would end the shell, so try it on "true".
+	true >> $LOCK 2>/dev/null || return 1
+	exec 9>> $LOCK
+	flock -n 9 || { exec 9>&-; return 1; }
+	LOCKED=1
+}
+
+locked() {
+	lock && return 0
+	echo "busy: another Startup Speeder Upper is at work" >&2
+	return 3
+}
+
 cmd_install() {
 	prepare || { fail "not a system I know: $WHY"; return 1; }
 	case " $(parts) " in *" unknown "*) fail "not a system I know: $(parts)"; return 1 ;; esac
@@ -407,7 +548,17 @@ cmd_install() {
 	log "install on $MODEL, stock startup ${1:-unknown} ms"
 	# The trial starts before the first change: if anything stops halfway,
 	# the next startup asks, and no answer puts everything back.
-	set_state trial "$1" "" && write_hook || { fail "could not write the trial state"; return 1; }
+	# In this order, so that a power cut at any point leaves one way of
+	# asking that matches the recorded trial: the new way goes in first (it
+	# stands down by itself while the state names no trial of its kind), then
+	# the state, and only then does an earlier try's other way go.
+	via=pak; [ "$2" = web ] && via=web
+	{ if [ $via = web ]; then watch_install; else write_hook; fi; } && set_state trial "$1" "" "$(boot_id)" $via || {
+		fail "could not write the trial state; putting everything back"
+		cmd_remove
+		return 1
+	}
+	if [ $via = web ]; then rm -f "$HOOK"; else watch_remove; fi
 	if apply_all tweaked; then
 		log "installed: $(parts)"
 		return 0
@@ -418,14 +569,34 @@ cmd_install() {
 }
 
 cmd_keep() {
-	set_state kept "$(field before)" "$1" && rm -f "$HOOK" && sync && log "kept, startup ${1:-unknown} ms"
+	[ "$(phase)" = trial ] || { fail "no trial to keep: the changes were already put back"; return 1; }
+	trial_started || { fail "restart the Brick first: it has not started with the changes yet"; return 1; }
+	# The timer's time is up even when its undo has not managed to start.
+	if web_trial && [ "$(uptime_s)" -ge $WATCH_SECS ]; then
+		fail "too late: the trial's time is up"; return 1
+	fi
+	# An install that stopped halfway is not something to keep.
+	prepare && [ "$(parts)" = "tweaked tweaked tweaked tweaked tweaked tweaked" ] ||
+		{ fail "not every change is in place: $(parts)"; return 1; }
+	set_state kept "$(field before)" "$1" || { fail "could not record the answer"; return 1; }
+	rm -f "$HOOK"; watch_remove
+	log "kept, startup ${1:-unknown} ms"
+	return 0
 }
 
+# Returns 2 when the Brick could not even be read (no room in /tmp, say):
+# nothing was tried, and trying again later may work.
 cmd_remove() {
-	prepare || { fail "not a system I know: $WHY"; return 1; }
-	[ -f $STATE ] && set_state undo "$(field before)" "$(field after)"
+	if [ -f $STATE ] && ! set_state undo "$(field before)" "$(field after)"; then
+		fail "could not record the undo"; return 2
+	fi
+	prepare || { fail "not a system I know: $WHY"; return 2; }
 	if apply_all stock; then
-		rm -f $STATE "$HOOK" && sync
+		rm -f $STATE "$HOOK"; watch_remove
+		# What is left would undo and restart again at every startup.
+		if [ -e $STATE ] || [ -e "$HOOK" ] || watch_present; then
+			fail "everything is back, but the tool's own files could not be deleted"; return 1
+		fi
 		log "removed: $(parts)"
 		return 0
 	fi
@@ -435,11 +606,13 @@ cmd_remove() {
 
 restart() {
 	sync
-	if [ -x "$SYSTEM_PATH/bin/reboot_next" ]; then "$SYSTEM_PATH/bin/reboot_next"; else reboot; fi
+	# NextUI's own restart when it is there, TrimUI's otherwise.
+	{ [ -x "$SYSTEM_PATH/bin/reboot_next" ] && "$SYSTEM_PATH/bin/reboot_next"; } || reboot
 	exit 0
 }
 
 cmd_boot() {
+	lock || return 0
 	. "$PAK_DIR/ui.sh"
 	case "$(phase)" in
 		undo) undo_and_restart "Putting everything back..."; return 0 ;;
@@ -448,6 +621,10 @@ cmd_boot() {
 			# No trial on this Brick: nothing to ask, and nothing to keep this hook for.
 			rm -f "$HOOK"; sync; return 0 ;;
 	esac
+	# The web installer's trial now: its page asks, and this hook goes.
+	web_trial && { rm -f "$HOOK"; sync; return 0; }
+	# An install that stopped halfway is not something to keep.
+	[ "$(cmd_state)" = trial ] || { undo_and_restart "Putting everything back..."; return 0; }
 	ms=$(cmd_time)
 	# NextUI's install splash may still be drawing; the question has to be seen.
 	killall -9 show2.elf 2>/dev/null
@@ -460,29 +637,40 @@ cmd_boot() {
 
 undo_and_restart() {
 	busy "$1"
-	if cmd_remove; then
-		unbusy
-		restart
-	fi
+	cmd_remove
+	local rc=$?
 	unbusy
+	[ $rc = 0 ] && restart
+	if [ $rc = 2 ]; then
+		# Nothing was tried: the hook stays and tries at the next startup.
+		tell "Could not put things back just now.\nIt will try again at the next startup." 10
+		return 0
+	fi
 	# Retrying at every startup could loop, so the hook goes; the tool itself
 	# offers the undo again (its state stays "undo").
 	rm -f "$HOOK"; sync
 	tell "Not everything could be put back.\nOpen Startup Speeder Upper to try again." 10
 	# With the bootloader back to stock, one restart brings back a screen
-	# that the faster startup may have left dark.
-	[ "$(pkg_state):$(b0_state)" = stock:stock ] && restart
+	# that the faster startup may have left dark. Never while the hook is
+	# still there: it would run, fail and restart again at every startup.
+	[ ! -e "$HOOK" ] && [ "$(pkg_state):$(b0_state)" = stock:stock ] && restart
 }
 
 trap 'rm -rf "$TMP"' EXIT
+# A change runs to its end even when the USB cable that started it is pulled.
+# So does a restart: NextUI's stops adb, and with it this command's terminal.
+case "$1" in install | keep | remove | restart | watch) trap '' HUP ;; esac
 
 case "$1" in
 	state) cmd_state ;;
 	time) cmd_time ;;
-	install) cmd_install "$2" ;;
-	keep) cmd_keep "$2" ;;
-	remove) cmd_remove ;;
+	install) locked && cmd_install "$2" "$3" ;;
+	keep) locked && cmd_keep "$2" ;;
+	remove) locked && cmd_remove ;;
 	boot) cmd_boot ;;
+	watch) cmd_watch ;;
+	left) cmd_left ;;
+	restart) restart < /dev/null > /dev/null 2>&1 ;;
 	field) field "$2" ;;
-	*) echo "usage: speeder.sh state|time|install MS|keep MS|remove|boot" >&2; exit 2 ;;
+	*) echo "usage: speeder.sh state|time|install MS [web]|keep [MS]|remove|boot|watch|left|restart" >&2; exit 2 ;;
 esac

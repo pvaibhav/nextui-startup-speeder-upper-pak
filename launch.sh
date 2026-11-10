@@ -65,6 +65,11 @@ fast)
 	unbusy
 	say "Not everything could be put back.\nOpen Startup Speeder Upper to try again."
 	;;
+restart)
+	# Installed, but the restart did not happen: the trial starts with it.
+	busy "All set. Restarting..."
+	restart
+	;;
 trial)
 	# The question normally comes at startup; seeing this screen means it works.
 	if ask "$(keep_question "$now")"; then

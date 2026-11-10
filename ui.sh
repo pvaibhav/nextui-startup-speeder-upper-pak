@@ -1,5 +1,6 @@
 # Startup Speeder Upper: questions and messages on screen, via minui-presenter.
 # Sourced by launch.sh and speeder.sh; PAK_DIR must be set.
+# "9>&-": what runs in the background must not hold speeder.sh's lock.
 
 PRESENTER="$PAK_DIR/bin/minui-presenter"
 BUSY_PID=""
@@ -12,13 +13,13 @@ ask() {
 	local secs=${2:-0} pid guard="" rc
 	if [ "$secs" -gt 0 ]; then
 		"$PRESENTER" --message-alignment middle --message "$1" --cancel-show --cancel-text NO --confirm-show --confirm-text YES \
-			--timeout "$secs" --show-time-left > /dev/null 2>&1 &
+			--timeout "$secs" --show-time-left > /dev/null 2>&1 9>&- &
 		pid=$!
 		# A presenter that hangs must not hold up the startup forever.
-		(sleep $((secs + 15)); stop $pid) 2> /dev/null &
+		(sleep $((secs + 15)); stop $pid) 2> /dev/null 9>&- &
 		guard=$!
 	else
-		"$PRESENTER" --message-alignment middle --message "$1" --cancel-show --cancel-text NO --confirm-show --confirm-text YES --timeout 0 > /dev/null 2>&1 &
+		"$PRESENTER" --message-alignment middle --message "$1" --cancel-show --cancel-text NO --confirm-show --confirm-text YES --timeout 0 > /dev/null 2>&1 9>&- &
 		pid=$!
 	fi
 	wait $pid; rc=$?
@@ -32,9 +33,9 @@ say() { present --message "$1" --confirm-show --confirm-text OK --timeout 0; }
 tell() {
 	local pid
 	"$PRESENTER" --message-alignment middle --message "$1" --confirm-show --confirm-text OK \
-		--timeout "$2" > /dev/null 2>&1 &
+		--timeout "$2" > /dev/null 2>&1 9>&- &
 	pid=$!
-	(sleep $(($2 + 15)); stop $pid) 2> /dev/null &
+	(sleep $(($2 + 15)); stop $pid) 2> /dev/null 9>&- &
 	wait $pid
 }
 
@@ -49,7 +50,7 @@ stop() {
 
 busy() {
 	unbusy
-	"$PRESENTER" --message-alignment middle --message "$1" --timeout -1 > /dev/null 2>&1 &
+	"$PRESENTER" --message-alignment middle --message "$1" --timeout -1 > /dev/null 2>&1 9>&- &
 	BUSY_PID=$!
 }
 
