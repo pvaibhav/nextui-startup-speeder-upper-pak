@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Startup Speeder Upper</title>
 <meta name="description" content="Takes about 9 seconds off a TrimUI Brick's startup, over a USB cable, from this page.">
+<meta name="author" content="pvaibhav">
 <style>
 :root {
 	--ground: #dce3ea;
@@ -50,7 +51,8 @@ h1 {
 	letter-spacing: -0.035em;
 	text-wrap: balance;
 }
-.lede { margin: 1rem 0 2rem; font-size: 1.2rem; line-height: 1.4; max-width: 26rem; }
+.lede { margin: 1rem 0 0.4rem; font-size: 1.2rem; line-height: 1.4; max-width: 26rem; }
+.byline { margin: 0 0 2rem; color: var(--quiet); font-size: 0.95rem; }
 
 /* The Brick. Its screen is the page's only dialog. */
 .brick {
@@ -164,6 +166,8 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule);
 <main>
 	<h1>Startup Speeder Upper</h1>
 	<p class="lede">Takes about 9 seconds off your Brick's startup. One button to speed up, one button to undo.</p>
+	<p class="byline">By <a href="https://github.com/pvaibhav">pvaibhav</a>, who also makes
+	<a href="https://github.com/pvaibhav/BaseOS">BaseOS</a>.</p>
 
 	<div class="brick">
 		<div class="glass" id="glass" aria-live="polite">
@@ -216,6 +220,8 @@ footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule);
 	</ul>
 
 	<footer>
+		The tweaks come from boot research for <a href="https://github.com/pvaibhav/BaseOS">BaseOS</a>,
+		which starts Anbernic handhelds in about 4 seconds.
 		Undo puts everything back exactly the way TrimUI shipped it.
 		<a href="https://github.com/pvaibhav/nextui-startup-speeder-upper-pak/blob/main/docs/how-it-works.md">How it works</a>,
 		and the <a href="https://github.com/pvaibhav/nextui-startup-speeder-upper-pak">source</a>.
